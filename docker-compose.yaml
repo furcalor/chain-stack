@@ -26,9 +26,9 @@ services:
       "--allow-insecure-unlock",  
       "--syncmode=full",
       "--nodiscover",
-      "--nat extip:38.109.255.242",
+      "--nat=extip:38.109.255.242",
       "--mine",
-      "--miner.coinbase=0x5bbfa5724260Cb175cB39b24802A04c3bfe72eb3",
+      "--miner.etherbase=0x5bbfa5724260Cb175cB39b24802A04c3bfe72eb3",
       ]
       
 
@@ -83,7 +83,7 @@ services:
         ETHEREUM_JSONRPC_VARIANT: 'geth'
         ETHEREUM_JSONRPC_HTTP_URL: http://chain:9545
         BLOCKSCOUT_HOST: 0.0.0.0
-        PORT: 4000
+        PORT: 4003
         ETHEREUM_JSONRPC_WS_URL: ws://chain:9546/
         INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: 'true'
         FETCH_REWARDS_WAY: trace_block
@@ -95,7 +95,7 @@ services:
         CHAIN_ID: '1773'
         NETWORK: PartyChain
     ports:
-      - 4000:4000
+      - 4003:4003
 
   nginx:
     image: 'jc21/nginx-proxy-manager:latest'
@@ -107,6 +107,42 @@ services:
     volumes:
       - nginx-data:/data
 
+  mcdb:
+    image: postgres:14
+    restart: always
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "miningcore", "-U", "miningcore" ]
+      timeout: 45s
+      interval: 10s
+      retries: 10
+    environment:
+        POSTGRES_PASSWORD: 'password'
+        POSTGRES_USER: 'miningcore'
+        POSTGRES_HOST_AUTH_METHOD: 'trust'
+        POSTGRES_DATABASE: miningcore
+    ports:
+      - 5432:5432
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d/
+
+  miningcore:
+    image: tmjeff/mcmsigner
+    restart: always
+    depends_on:
+      mcdb:
+        condition: service_healthy
+    user: root
+    ports:
+      - 4000:4000
+      - 4001:4001
+      - 4066
+      - 4067
+      - 4073:4073
+    volumes:
+      - ./mcconfig.json:/app/config.json
+      - dag:/home/dag
+
 volumes:
    redis-data:
    nginx-data:
+   dag:
