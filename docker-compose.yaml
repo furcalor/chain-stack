@@ -1,37 +1,51 @@
+version: '3.3'
+
 services:
 
-  chain:
-    image: gcr.io/mineonlium/chain:latest
-    ports:
-      # HTTP server / GraphQL API
-      - 9545:9545
-      # WebSocket
-      - 9546:9546
-      # Network listening port (P2P networking)
-      - 30301:30301
+  chaininit:
+    image: furcalor/partychainrpc:latest
     command:
       [
-      "--port=30301",
+      "init",
+      "--datadir=/go/.party",
+      "/root/genesis.json",
+      ]
+
+  chain:
+    image: furcalor/partychainrpc:latest
+    ports:
+      # HTTP server / GraphQL API
+      - 8545:8545
+      # WebSocket
+      - 8546:8546
+      # Network listening port (P2P networking)
+      - 60301:60301
+    command:
+      [
+      "--datadir=/go/.party",
+      "--port=60301",
       "--http",
-      "--http.port=9545",
+      "--http.port=8545",
       "--http.addr=0.0.0.0",
-      "--http.api=personal,eth,net,trace,web3,txpool,miner,admin,clique",
+      "--http.api=debug,ssh,personal,eth,net,trace,web3,txpool,miner,admin,clique,db",
       "--http.corsdomain='*'",
       "--http.vhosts='*'",
       "--ws",
-      "--ws.port=9546",
+      "--ws.port=8546",
       "--ws.addr=0.0.0.0",
-      "--ws.api=personal,eth,net,trace,web3,txpool,miner,admin,clique",
+      "--ws.api=debug,personal,eth,net,trace,web3,txpool,miner,admin,clique,db",
       "--ws.origins='*'",
-      "--allow-insecure-unlock",  
+      "--graphql",
+      "--graphql.corsdomain='*'",
+      "--graphql.vhosts='*'",
+      "--authrpc.vhosts='*'",
+      "--allow-insecure-unlock",
       "--syncmode=full",
-      "--nodiscover",
-      "--nat=extip:38.109.255.242",
-      "--mine",
-      "--miner.etherbase=0x5bbfa5724260Cb175cB39b24802A04c3bfe72eb3",
-      ]
-      
+      "--nat=extip:YOURIP",
+      "--gcmode=archive",
 
+      "--bootnodes=enode://8904d18d98034bf36cc8aed2ff33fd5a59e92bcd549d5f865792ea2864170b5a88acdde54d799148071137b7ab2b9c544d82ad7354ac053fffb242e5124b3d1c@172.104.194.36:30303,enode://1918351925bd05be23486fe60fc4635f3a25abb424645f7258>
+      ]
 
 # Blockscout postgres database
   db:
@@ -40,17 +54,17 @@ services:
     restart: always
     container_name: 'postgres'
     healthcheck:
-      test: [ "CMD", "pg_isready"]
+      test: [ "CMD", "pg_isready  -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       timeout: 45s
       interval: 10s
       retries: 10
     environment:
-        POSTGRES_PASSWORD: ''
+        POSTGRES_PASSWORD: 'kg0jg9fdjgfd09gjfd90jgdf0'
         POSTGRES_USER: 'postgres'
         POSTGRES_HOST_AUTH_METHOD: 'trust'
-    # Uncomment the following line to persist the database 
+    # Uncomment the following line to persist the database
     # Dont forget the volume in the bottom of the file as well
-    # volumes:
+    #volumes:
     #   - postgres-data:/var/lib/postgresql/data
     ports:
       - 7432:5432
@@ -64,16 +78,15 @@ services:
     volumes:
       - redis-data:/data
 
-# # Blockscout blockscanner
+# Blockscout blockscanner
   blockscout:
     image: tmjeff/moscout
     restart: always
     depends_on:
-      db:
-        condition: service_healthy  
-    container_name: 'blockscout'
+      - db
     links:
       - db:database
+    container_name: 'blockscout'
     command: bash -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
     extra_hosts:
       - 'host.docker.internal:host-gateway'
@@ -81,68 +94,21 @@ services:
     #   -  ./envs/common-blockscout.env
     environment:
         ETHEREUM_JSONRPC_VARIANT: 'geth'
-        ETHEREUM_JSONRPC_HTTP_URL: http://chain:9545
+        ETHEREUM_JSONRPC_HTTP_URL: http://YOUTADDRESS:8545
+        ETHEREUM_JSONRPC_TRACE_URL: http://YOUTADDRESS:8545
+        ETHEREUM_JSONRPC_DISABLE_ARCHIVE_BALANCES: 'true'
+        INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: 'true'
+        BLOCK_TRANSFORMER: base
         BLOCKSCOUT_HOST: 0.0.0.0
-        PORT: 4003
-        ETHEREUM_JSONRPC_WS_URL: ws://chain:9546/
-        INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: 'true'
-        FETCH_REWARDS_WAY: trace_block
         DATABASE_URL: postgresql://postgres:@db:5432/blockscout?ssl=false
-        ECTO_USE_SSL: 'false'
-        ETHEREUM_JSONRPC_TRACE_URL: http://chain:9545/
         INDEXER_CATCHUP_BLOCKS_BATCH_SIZE: 250
-        # SECRET_KEY_BASE: '56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN'
         CHAIN_ID: '1773'
         NETWORK: PartyChain
-    ports:
-      - 4003:4003
+        ECTO_USE_SSL: 'false'
+        PORT: 4000
+        FETCH_REWARDS_WAY: trace_block
 
-  nginx:
-    image: 'jc21/nginx-proxy-manager:latest'
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '81:81'
-      - '443:443'
-    volumes:
-      - nginx-data:/data
-
-  mcdb:
-    image: postgres:14
-    restart: always
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-q", "-d", "miningcore", "-U", "miningcore" ]
-      timeout: 45s
-      interval: 10s
-      retries: 10
-    environment:
-        POSTGRES_PASSWORD: 'password'
-        POSTGRES_USER: 'miningcore'
-        POSTGRES_HOST_AUTH_METHOD: 'trust'
-        POSTGRES_DATABASE: miningcore
-    ports:
-      - 5432:5432
-    volumes:
-      - ./db:/docker-entrypoint-initdb.d/
-
-  miningcore:
-    image: tmjeff/mcmsigner
-    restart: always
-    depends_on:
-      mcdb:
-        condition: service_healthy
-    user: root
     ports:
       - 4000:4000
-      - 4001:4001
-      - 4066
-      - 4067
-      - 4073:4073
-    volumes:
-      - ./mcconfig.json:/app/config.json
-      - dag:/home/dag
-
 volumes:
    redis-data:
-   nginx-data:
-   dag:
