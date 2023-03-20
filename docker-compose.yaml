@@ -59,7 +59,7 @@ services:
       interval: 10s
       retries: 10
     environment:
-        POSTGRES_PASSWORD: 'kg0jg9fdjgfd09gjfd90jgdf0'
+        POSTGRES_PASSWORD: 'YOURPASSWORD'
         POSTGRES_USER: 'postgres'
         POSTGRES_HOST_AUTH_METHOD: 'trust'
     # Uncomment the following line to persist the database
