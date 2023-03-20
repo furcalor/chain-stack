@@ -107,6 +107,8 @@ services:
         ECTO_USE_SSL: 'false'
         PORT: 4000
         FETCH_REWARDS_WAY: trace_block
+        COIN: GRAMS
+        COIN_NAME: GRAMS
 
     ports:
       - 4000:4000
